@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rideservice
+  namespace: ride-hailing
+spec:
+  type: ClusterIP
+  selector:
+    app: rideservice
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
