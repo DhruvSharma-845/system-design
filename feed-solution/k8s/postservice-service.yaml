@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postservice
+  namespace: feed
+spec:
+  type: ClusterIP
+  selector:
+    app: postservice
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
