@@ -17,8 +17,8 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
-    public PostCreationResponse createPost(PostRequest post) {
-        Post savedPost = postRepository.save(new Post(null, post.getContent()));
+    public PostCreationResponse createPost(PostRequest post, String authorId) {
+        Post savedPost = postRepository.save(new Post(null, post.getContent(), authorId));
         return new PostCreationResponse(savedPost.getId());
     }
 }

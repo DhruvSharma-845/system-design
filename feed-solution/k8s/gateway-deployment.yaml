@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: feed
+  labels:
+    app: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: localhost/gateway:dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9090
+          env:
+            - name: KEYCLOAK_ISSUER_URI
+              value: http://keycloak:8080/realms/feed
+            - name: KEYCLOAK_JWK_SET_URI
+              value: http://keycloak:8080/realms/feed/protocol/openid-connect/certs
+            - name: POSTSERVICE_URL
+              value: http://postservice:8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

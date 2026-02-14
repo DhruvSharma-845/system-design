@@ -17,4 +17,5 @@ public class Post {
     @Id
     private Long id;
     private String content;
+    private String authorId;
 }

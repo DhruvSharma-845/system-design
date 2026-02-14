@@ -1,0 +1,58 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: gateway
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # Route definitions - all traffic goes through the gateway
+          # Property prefix changed in Gateway 5.0.x: spring.cloud.gateway.server.webflux.*
+          routes:
+            # Post Service routes
+            - id: postservice-routes
+              uri: ${POSTSERVICE_URL:http://postservice:8080}
+              predicates:
+                - Path=/api/v1/posts/**
+
+            # Future: Add more service routes here
+            # - id: userservice-routes
+            #   uri: ${USERSERVICE_URL:http://userservice:8080}
+            #   predicates:
+            #     - Path=/api/v1/users/**
+
+          # Global filters applied to all routes
+          default-filters:
+            - PreserveHostHeader
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
+  # OAuth2 Resource Server configuration
+  # Gateway validates JWT signature using Keycloak's JWK keys.
+  # Only jwk-set-uri is set (no issuer-uri) so Spring Security does NOT
+  # validate the "iss" claim. This is needed because tokens obtained via
+  # port-forward (localhost:8080) have a different issuer than the
+  # cluster-internal URL (keycloak:8080). In production with a stable
+  # external hostname, add issuer-uri back for full validation.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://keycloak:8080/realms/feed/protocol/openid-connect/certs}
+
+# Actuator endpoints for health checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    org.springframework.security: INFO

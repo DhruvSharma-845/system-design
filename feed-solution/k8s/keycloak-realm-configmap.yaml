@@ -1,0 +1,311 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm-config
+  namespace: feed
+data:
+  feed-realm.json: |
+    {
+      "realm": "feed",
+      "enabled": true,
+      "sslRequired": "external",
+      "registrationAllowed": true,
+      "registrationEmailAsUsername": false,
+      "verifyEmail": false,
+      "loginWithEmailAllowed": true,
+      "duplicateEmailsAllowed": false,
+      "resetPasswordAllowed": true,
+      "editUsernameAllowed": false,
+      "rememberMe": true,
+      "bruteForceProtected": true,
+      "permanentLockout": false,
+      "maxFailureWaitSeconds": 900,
+      "minimumQuickLoginWaitSeconds": 60,
+      "waitIncrementSeconds": 60,
+      "quickLoginCheckMilliSeconds": 1000,
+      "maxDeltaTimeSeconds": 43200,
+      "failureFactor": 5,
+      "accessTokenLifespan": 300,
+      "accessTokenLifespanForImplicitFlow": 900,
+      "ssoSessionIdleTimeout": 1800,
+      "ssoSessionMaxLifespan": 36000,
+      "offlineSessionIdleTimeout": 2592000,
+      "offlineSessionMaxLifespan": 5184000,
+      "roles": {
+        "realm": [
+          {
+            "name": "feed_user",
+            "description": "Standard user - can create, read, and manage own posts",
+            "composite": false,
+            "clientRole": false
+          },
+          {
+            "name": "feed_moderator",
+            "description": "Moderator - can review, flag, and remove any content (includes feed_user)",
+            "composite": true,
+            "clientRole": false,
+            "composites": {
+              "realm": ["feed_user"]
+            }
+          },
+          {
+            "name": "feed_admin",
+            "description": "Administrator - full access to all resources and user management",
+            "composite": true,
+            "clientRole": false,
+            "composites": {
+              "realm": ["feed_user", "feed_moderator"]
+            }
+          }
+        ]
+      },
+      "defaultRoles": ["feed_user"],
+      "clients": [
+        {
+          "clientId": "feed-gateway",
+          "name": "Feed API Gateway",
+          "description": "API Gateway service for routing and token validation",
+          "enabled": true,
+          "protocol": "openid-connect",
+          "publicClient": false,
+          "secret": "feed-gateway-secret",
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": true,
+          "authorizationServicesEnabled": false,
+          "redirectUris": ["http://localhost:9090/*"],
+          "webOrigins": ["*"],
+          "bearerOnly": false,
+          "consentRequired": false,
+          "fullScopeAllowed": true,
+          "defaultClientScopes": ["openid", "profile", "email", "roles"],
+          "optionalClientScopes": ["microprofile-jwt"]
+        },
+        {
+          "clientId": "feed-frontend",
+          "name": "Feed Frontend SPA",
+          "description": "Public client for frontend single-page application (PKCE flow). Handles user login and self-registration via Keycloak's OIDC flow.",
+          "enabled": true,
+          "protocol": "openid-connect",
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": false,
+          "redirectUris": [
+            "http://localhost:3000/*",
+            "http://localhost:5173/*",
+            "http://localhost:4200/*"
+          ],
+          "webOrigins": ["*"],
+          "bearerOnly": false,
+          "consentRequired": false,
+          "fullScopeAllowed": true,
+          "attributes": {
+            "pkce.code.challenge.method": "S256",
+            "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:5173/*##http://localhost:4200/*"
+          },
+          "defaultClientScopes": ["openid", "profile", "email", "roles"],
+          "optionalClientScopes": ["microprofile-jwt"]
+        },
+        {
+          "clientId": "postservice",
+          "name": "Post Service",
+          "description": "Confidential client for postservice (service-to-service auth)",
+          "enabled": true,
+          "protocol": "openid-connect",
+          "publicClient": false,
+          "secret": "postservice-secret",
+          "standardFlowEnabled": false,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": true,
+          "bearerOnly": true,
+          "consentRequired": false,
+          "fullScopeAllowed": true,
+          "defaultClientScopes": ["openid", "profile", "email", "roles"],
+          "optionalClientScopes": ["microprofile-jwt"]
+        }
+      ],
+      "clientScopes": [
+        {
+          "name": "openid",
+          "description": "OpenID Connect scope",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true"
+          },
+          "protocolMappers": [
+            {
+              "name": "sub",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-sub-mapper",
+              "consentRequired": false,
+              "config": {
+                "introspection.token.claim": "true",
+                "access.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "name": "profile",
+          "description": "OpenID Connect profile scope",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true"
+          },
+          "protocolMappers": [
+            {
+              "name": "full name",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-full-name-mapper",
+              "consentRequired": false,
+              "config": {
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "preferred_username",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "username",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "preferred_username",
+                "userinfo.token.claim": "true",
+                "jsonType.label": "String"
+              }
+            }
+          ]
+        },
+        {
+          "name": "email",
+          "description": "OpenID Connect email scope",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true"
+          },
+          "protocolMappers": [
+            {
+              "name": "email",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "email",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "email",
+                "userinfo.token.claim": "true",
+                "jsonType.label": "String"
+              }
+            }
+          ]
+        },
+        {
+          "name": "roles",
+          "description": "OpenID Connect roles scope - adds realm_access.roles to tokens",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "false"
+          },
+          "protocolMappers": [
+            {
+              "name": "realm roles",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-realm-role-mapper",
+              "consentRequired": false,
+              "config": {
+                "multivalued": "true",
+                "userinfo.token.claim": "true",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "realm_access.roles",
+                "jsonType.label": "String"
+              }
+            }
+          ]
+        },
+        {
+          "name": "microprofile-jwt",
+          "description": "Microprofile JWT scope for groups claim",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true",
+            "display.on.consent.screen": "false"
+          },
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-realm-role-mapper",
+              "consentRequired": false,
+              "config": {
+                "multivalued": "true",
+                "userinfo.token.claim": "true",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "groups",
+                "jsonType.label": "String"
+              }
+            }
+          ]
+        }
+      ],
+      "users": [
+        {
+          "username": "testuser",
+          "enabled": true,
+          "email": "testuser@feed.local",
+          "firstName": "Test",
+          "lastName": "User",
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "testpass",
+              "temporary": false
+            }
+          ],
+          "realmRoles": ["feed_user"]
+        },
+        {
+          "username": "testadmin",
+          "enabled": true,
+          "email": "testadmin@feed.local",
+          "firstName": "Test",
+          "lastName": "Admin",
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "testpass",
+              "temporary": false
+            }
+          ],
+          "realmRoles": ["feed_user", "feed_admin"]
+        },
+        {
+          "username": "testmoderator",
+          "enabled": true,
+          "email": "testmod@feed.local",
+          "firstName": "Test",
+          "lastName": "Moderator",
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "testpass",
+              "temporary": false
+            }
+          ],
+          "realmRoles": ["feed_user", "feed_moderator"]
+        }
+      ]
+    }
