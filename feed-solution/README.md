@@ -110,6 +110,7 @@ feed-solution/
 - Kind (Kubernetes in Docker)
 - Podman or Docker
 - kubectl
+- Helm
 - jq (for parsing JSON responses)
 
 ## 1. Create local Kubernetes cluster
@@ -172,7 +173,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/realms/feed/protocol/openid-connec
 echo $TOKEN
 ```
 
-### Create a post (via gateway through ingress URL)
+### Create a post (via gateway through Kubernetes Gateway URL)
 
 ```bash
 curl -X POST http://feed.local/api/v1/posts \

@@ -1,0 +1,55 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: feed-gateway
+  namespace: feed
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: feed.local
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: feed-routes
+  namespace: feed
+spec:
+  parentRefs:
+    - name: feed-gateway
+  hostnames:
+    - feed.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: gateway
+          port: 9090
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /realms
+      backendRefs:
+        - name: keycloak
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /resources
+      backendRefs:
+        - name: keycloak
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: feeds-web-app
+          port: 80

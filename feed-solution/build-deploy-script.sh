@@ -18,6 +18,17 @@ kind load image-archive /tmp/postservice-dev.tar --name feed-cluster
 kind load image-archive /tmp/gateway-dev.tar --name feed-cluster
 kind load image-archive /tmp/feeds-web-app-dev.tar --name feed-cluster
 
+echo "=== Installing Gateway API CRDs ==="
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.4.1" | kubectl apply -f -
+
+echo "=== Installing/Updating NGINX Gateway Fabric controller ==="
+helm upgrade --install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+  --create-namespace \
+  -n nginx-gateway \
+  --set nginx.service.type=NodePort \
+  --set-json 'nginx.service.nodePorts=[{"port":30080,"listenerPort":80},{"port":30443,"listenerPort":443}]'
+kubectl -n nginx-gateway wait --for=condition=available deployment/ngf-nginx-gateway-fabric --timeout=180s
+
 echo "=== Applying K8s manifests ==="
 kubectl apply -k k8s/
 
@@ -28,9 +39,6 @@ kubectl -n feed rollout restart deployment/postservice
 kubectl -n feed rollout restart deployment/gateway
 kubectl -n feed rollout restart deployment/feeds-web-app
 
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-kubectl -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=120s
-
 echo ""
 echo "=== Deployment complete ==="
 echo ""
@@ -39,7 +47,7 @@ echo "  kubectl -n feed get pods -w"
 echo ""
 echo "URL access (no port-forward for frontend + API):"
 echo "  http://feed.local"
-echo "  # Requires kind cluster created with kind-config.yaml (ports 80/443 mapped)"
+echo "  # Requires kind cluster created with kind-config.yaml (host 80/443 mapped to Kind nodePorts)"
 echo ""
 echo "Optional port-forward for Keycloak Admin Console:"
 echo "  kubectl -n feed port-forward svc/keycloak 8080:8080    # Keycloak Admin Console"
@@ -51,7 +59,7 @@ echo "    -d 'username=testuser' \\"
 echo "    -d 'password=testpass' \\"
 echo "    -d 'grant_type=password' | jq -r '.access_token'"
 echo ""
-echo "Create a post (via gateway through ingress):"
+echo "Create a post (via gateway through Kubernetes Gateway API):"
 echo "  curl -X POST http://feed.local/api/v1/posts \\"
 echo "    -H 'Content-Type: application/json' \\"
 echo "    -H 'Authorization: Bearer <TOKEN>' \\"
