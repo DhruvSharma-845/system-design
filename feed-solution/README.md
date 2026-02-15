@@ -3,27 +3,61 @@ Directory containing services and apps for feed solution
 # Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Kubernetes Cluster                       │
-│                                                                  │
-│  ┌─────────┐     ┌──────────────┐     ┌──────────────────────┐  │
-│  │Keycloak │     │  API Gateway │     │    Post Service       │  │
-│  │  (IdP)  │◄────│  (Spring     │────►│  (Spring Boot +      │  │
-│  │         │     │   Cloud GW)  │     │   OAuth2 Resource    │  │
-│  │ :8080   │     │   :9090      │     │   Server) :8080      │  │
-│  └─────────┘     └──────┬───────┘     └──────────┬───────────┘  │
-│       ▲                 │                        │               │
-│       │                 │                  ┌─────▼─────┐         │
-│       │                 │                  │ PostgreSQL │         │
-│       │                 │                  │   :5432    │         │
-│       │                 │                  └───────────-┘         │
-└───────┼─────────────────┼────────────────────────────────────────┘
-        │                 │
-        │    ┌────────────▼────────────┐
-        │    │   Future Frontend SPA   │
-        └────│  (React/Vue/Angular)    │
-             │  OIDC + PKCE Flow       │
-             └─────────────────────────┘
+                                  ┌──────────┐
+                                  │ Browser  │
+                                  │ (User)   │
+                                  └────┬─────┘
+                                       │
+                                http://feed.local
+                                       │
+┌──────────────────────────────────────┼───────────────────────────────────┐
+│                   Kubernetes Cluster (feed namespace)                     │
+│                                      │                                   │
+│          ┌───────────────────────────▼─────────────────────────┐        │
+│          │           NGINX Gateway Fabric (Gateway API)         │        │
+│          │                  host: feed.local                    │        │
+│          │                                                      │        │
+│          │  /           → feeds-web-app :80                     │        │
+│          │  /api        → gateway :9090                         │        │
+│          │  /realms     → keycloak :8080                        │        │
+│          │  /resources  → keycloak :8080                        │        │
+│          └──────┬────────────────┬────────────────┬────────────┘        │
+│                 │                │                │                      │
+│                 ▼                ▼                ▼                      │
+│        ┌──────────────┐  ┌────────────┐  ┌──────────────────┐          │
+│        │ feeds-web-app│  │  Keycloak  │  │   API Gateway    │          │
+│        │              │  │   (IdP)    │  │ (Spring Cloud GW)│          │
+│        │ React 19 +   │  │            │  │                  │          │
+│        │ Vite SPA     │  │ OIDC /     │  │ JWT validation   │          │
+│        │              │  │ OAuth2     │  │ via Keycloak JWKS│          │
+│        │ nginx :80    │  │ :8080      │  │ + route to svcs  │          │
+│        └──────────────┘  └────────────┘  │ :9090            │          │
+│                                          └────────┬─────────┘          │
+│                                                   │                    │
+│                                            ┌──────▼──────────┐        │
+│                                            │  Post Service    │        │
+│                                            │ (Spring Boot +   │        │
+│                                            │  OAuth2 Resource │        │
+│                                            │  Server)         │        │
+│                                            │ JWT validation   │        │
+│                                            │ via Keycloak JWKS│        │
+│                                            │ :8080            │        │
+│                                            └────────┬────────┘        │
+│                                                     │                  │
+│                                              ┌──────▼───────┐         │
+│                                              │  PostgreSQL   │         │
+│                                              │    :5432      │         │
+│                                              └──────────────┘         │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+OIDC Flow:
+  1. Browser loads React SPA from feeds-web-app (/)
+  2. User clicks Login/Sign Up → redirect to Keycloak (/realms/feed/...)
+  3. Keycloak authenticates user → Authorization Code + PKCE → JWT tokens
+  4. Browser sends API requests with Bearer JWT → /api/v1/posts
+  5. Gateway validates JWT (JWKS) → routes to Post Service
+  6. Post Service validates JWT (JWKS, defense-in-depth) → processes request
 ```
 
 ## Auth Flow
@@ -49,14 +83,16 @@ Directory containing services and apps for feed solution
 
 ## Technology Choices
 
-| Component              | Technology                                 | Why                                                        |
-| ---------------------- | ------------------------------------------ | ---------------------------------------------------------- |
-| Identity Provider      | **Keycloak**                               | Open-source, cloud-agnostic, OIDC/OAuth2/SAML, self-hosted |
-| API Gateway            | **Spring Cloud Gateway**                   | Native Spring integration, reactive, JWT validation        |
-| Service Auth           | **Spring Security OAuth2 Resource Server** | Industry standard, per-service JWT validation              |
-| Auth Protocol          | **OpenID Connect (OIDC)**                  | Industry standard on top of OAuth2                         |
-| Token Format           | **JWT**                                    | Stateless, self-contained, verifiable                      |
-| Frontend Auth (future) | **OIDC Authorization Code + PKCE**         | Secure flow for SPAs, no client secret needed              |
+| Component         | Technology                                 | Why                                                        |
+| ----------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| Frontend          | **React 19 + Vite + TypeScript**           | Modern SPA with fast build tooling                         |
+| K8s Ingress       | **NGINX Gateway Fabric (Gateway API)**     | K8s-native routing, path-based traffic splitting           |
+| Identity Provider | **Keycloak**                               | Open-source, cloud-agnostic, OIDC/OAuth2/SAML, self-hosted |
+| API Gateway       | **Spring Cloud Gateway**                   | Native Spring integration, reactive, JWT validation        |
+| Service Auth      | **Spring Security OAuth2 Resource Server** | Industry standard, per-service JWT validation              |
+| Auth Protocol     | **OpenID Connect (OIDC)**                  | Industry standard on top of OAuth2                         |
+| Token Format      | **JWT**                                    | Stateless, self-contained, verifiable                      |
+| Frontend Auth     | **OIDC Authorization Code + PKCE**         | Secure flow for SPAs, no client secret needed              |
 
 ## Roles & Permissions
 
@@ -70,6 +106,13 @@ Directory containing services and apps for feed solution
 
 ```
 feed-solution/
+├── feeds-web-app/              # Frontend SPA (React 19 + Vite + TypeScript)
+│   ├── package.json
+│   ├── Dockerfile              # Multi-stage: build → nginx:alpine
+│   ├── nginx.conf              # SPA routing (try_files)
+│   └── src/
+│       ├── main.tsx
+│       └── App.tsx             # OIDC PKCE login, post creation, role-based UI
 ├── gateway/                    # API Gateway (Spring Cloud Gateway)
 │   ├── pom.xml
 │   ├── Dockerfile
@@ -95,10 +138,13 @@ feed-solution/
 │   └── feed-realm.json         # Pre-configured realm, clients, roles, test users
 ├── k8s/                        # Kubernetes manifests
 │   ├── kustomization.yaml
+│   ├── feed-gateway-api.yaml   # NGINX Gateway Fabric + HTTPRoute (ingress)
+│   ├── feeds-web-app-*.yaml    # Frontend deployment
 │   ├── keycloak-*.yaml         # Keycloak deployment
-│   ├── gateway-*.yaml          # Gateway deployment
+│   ├── gateway-*.yaml          # API Gateway deployment
 │   ├── postservice-*.yaml      # Post service deployment
 │   └── postgres-*.yaml         # PostgreSQL deployment
+├── kind-config.yaml            # Kind cluster config (host ports 80/443)
 ├── build-deploy-script.sh      # Build and deploy all services
 └── README.md
 ```
@@ -223,9 +269,9 @@ Access at http://localhost:8080 after port-forwarding.
 - Username: `admin`
 - Password: `admin`
 
-# Future Frontend Integration
+# Frontend Integration
 
-The `feed-frontend` client in Keycloak is pre-configured for SPA integration:
+The `feed-frontend` client in Keycloak is configured for the React SPA:
 
 - **Protocol**: OpenID Connect
 - **Flow**: Authorization Code + PKCE (most secure for SPAs)
