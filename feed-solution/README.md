@@ -49,22 +49,22 @@ Directory containing services and apps for feed solution
 
 ## Technology Choices
 
-| Component | Technology | Why |
-|-----------|-----------|-----|
-| Identity Provider | **Keycloak** | Open-source, cloud-agnostic, OIDC/OAuth2/SAML, self-hosted |
-| API Gateway | **Spring Cloud Gateway** | Native Spring integration, reactive, JWT validation |
-| Service Auth | **Spring Security OAuth2 Resource Server** | Industry standard, per-service JWT validation |
-| Auth Protocol | **OpenID Connect (OIDC)** | Industry standard on top of OAuth2 |
-| Token Format | **JWT** | Stateless, self-contained, verifiable |
-| Frontend Auth (future) | **OIDC Authorization Code + PKCE** | Secure flow for SPAs, no client secret needed |
+| Component              | Technology                                 | Why                                                        |
+| ---------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| Identity Provider      | **Keycloak**                               | Open-source, cloud-agnostic, OIDC/OAuth2/SAML, self-hosted |
+| API Gateway            | **Spring Cloud Gateway**                   | Native Spring integration, reactive, JWT validation        |
+| Service Auth           | **Spring Security OAuth2 Resource Server** | Industry standard, per-service JWT validation              |
+| Auth Protocol          | **OpenID Connect (OIDC)**                  | Industry standard on top of OAuth2                         |
+| Token Format           | **JWT**                                    | Stateless, self-contained, verifiable                      |
+| Frontend Auth (future) | **OIDC Authorization Code + PKCE**         | Secure flow for SPAs, no client secret needed              |
 
 ## Roles & Permissions
 
-| Role | Description | Permissions |
-|------|-------------|-------------|
-| `feed_user` | Standard user | Create posts, read posts |
+| Role             | Description                            | Permissions                            |
+| ---------------- | -------------------------------------- | -------------------------------------- |
+| `feed_user`      | Standard user                          | Create posts, read posts               |
 | `feed_moderator` | Content moderator (includes feed_user) | All user permissions + delete any post |
-| `feed_admin` | Administrator (includes all roles) | Full access to all resources |
+| `feed_admin`     | Administrator (includes all roles)     | Full access to all resources           |
 
 ## Project Structure
 
@@ -115,7 +115,7 @@ feed-solution/
 ## 1. Create local Kubernetes cluster
 
 ```bash
-kind create cluster --name feed-cluster
+kind create cluster --config kind-config.yaml
 ```
 
 ## 2. Build and deploy all services
@@ -131,16 +131,30 @@ chmod +x ./build-deploy-script.sh
 kubectl -n feed get pods -w
 ```
 
-## 4. Port-forward services
+## 4. Enable URL access (no frontend/API port-forwarding)
 
-In separate terminals:
+Map `feed.local` to localhost:
 
 ```bash
-# Keycloak (Admin Console + token endpoint)
-kubectl -n feed port-forward svc/keycloak 8080:8080
+echo "127.0.0.1 feed.local" | sudo tee -a /etc/hosts
+```
 
-# API Gateway (all API traffic goes through here)
-kubectl -n feed port-forward svc/gateway 9090:9090
+Frontend is available at:
+
+```
+http://feed.local
+```
+
+API is available at:
+
+```
+http://feed.local/api
+```
+
+Optional (Keycloak only):
+
+```bash
+kubectl -n feed port-forward svc/keycloak 8080:8080
 ```
 
 ## 5. Test authentication
@@ -158,10 +172,10 @@ TOKEN=$(curl -s -X POST http://localhost:8080/realms/feed/protocol/openid-connec
 echo $TOKEN
 ```
 
-### Create a post (via gateway)
+### Create a post (via gateway through ingress URL)
 
 ```bash
-curl -X POST http://localhost:9090/api/v1/posts \
+curl -X POST http://feed.local/api/v1/posts \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"content": "Hello from authenticated user!"}'
@@ -170,7 +184,7 @@ curl -X POST http://localhost:9090/api/v1/posts \
 ### Verify auth is enforced (should return 401)
 
 ```bash
-curl -v http://localhost:9090/api/v1/posts
+curl -v http://feed.local/api/v1/posts
 ```
 
 ## Seed Test Users (dev only)
@@ -178,10 +192,10 @@ curl -v http://localhost:9090/api/v1/posts
 These users are pre-loaded via `feed-realm.json` for local development testing.
 In production, all users register dynamically through Keycloak's self-service signup.
 
-| Username | Password | Roles |
-|----------|----------|-------|
-| testuser | testpass | feed_user |
-| testadmin | testpass | feed_user, feed_admin |
+| Username      | Password | Roles                     |
+| ------------- | -------- | ------------------------- |
+| testuser      | testpass | feed_user                 |
+| testadmin     | testpass | feed_user, feed_admin     |
 | testmoderator | testpass | feed_user, feed_moderator |
 
 ## Register a New User (dynamic signup)
@@ -204,6 +218,7 @@ Admins can promote users to `feed_moderator` or `feed_admin` via the Keycloak Ad
 ## Keycloak Admin Console
 
 Access at http://localhost:8080 after port-forwarding.
+
 - Username: `admin`
 - Password: `admin`
 
@@ -218,16 +233,17 @@ The `feed-frontend` client in Keycloak is pre-configured for SPA integration:
 
 ### Recommended frontend OIDC libraries
 
-| Framework | Library |
-|-----------|---------|
-| React | `oidc-client-ts` + `react-oidc-context` |
-| Vue | `oidc-client-ts` + custom composable |
-| Angular | `angular-auth-oidc-client` |
-| Any | `keycloak-js` (Keycloak's official JS adapter) |
+| Framework | Library                                        |
+| --------- | ---------------------------------------------- |
+| React     | `oidc-client-ts` + `react-oidc-context`        |
+| Vue       | `oidc-client-ts` + custom composable           |
+| Angular   | `angular-auth-oidc-client`                     |
+| Any       | `keycloak-js` (Keycloak's official JS adapter) |
 
 ### Frontend signup + login flow (PKCE)
 
 **Sign Up (new user):**
+
 1. User clicks "Sign Up" in the frontend
 2. Frontend redirects to Keycloak (same OIDC endpoint -- Keycloak shows a "Register" link)
 3. User fills in the registration form (Keycloak's built-in UI or custom theme)
@@ -236,12 +252,14 @@ The `feed-frontend` client in Keycloak is pre-configured for SPA integration:
 6. Frontend exchanges code for tokens (access + refresh + id token)
 
 **Login (existing user):**
+
 1. User clicks "Login" -> redirect to Keycloak login page
 2. User enters credentials
 3. Keycloak redirects back with authorization code
 4. Frontend exchanges code for tokens
 
 **After authentication (both flows):**
+
 1. Frontend stores tokens in memory (not localStorage -- XSS protection)
 2. Frontend includes `Authorization: Bearer <access_token>` in API requests to the gateway
 3. Frontend uses token claims to show/hide UI based on roles
@@ -253,9 +271,9 @@ The `feed-frontend` client in Keycloak is pre-configured for SPA integration:
 // Example: Check roles from decoded JWT access token
 const roles = decodedToken.realm_access?.roles || [];
 
-const canCreatePost = roles.includes('feed_user');
-const canModerate = roles.includes('feed_moderator');
-const canAdmin = roles.includes('feed_admin');
+const canCreatePost = roles.includes("feed_user");
+const canModerate = roles.includes("feed_moderator");
+const canAdmin = roles.includes("feed_admin");
 
 // Show/hide UI elements based on roles
 // - All authenticated users see the feed and can create posts
@@ -267,12 +285,12 @@ const canAdmin = roles.includes('feed_admin');
 
 This architecture is **cloud-agnostic** and runs on any Kubernetes cluster:
 
-| Cloud | Managed K8s | Notes |
-|-------|-------------|-------|
-| AWS | EKS | Use ALB Ingress Controller for gateway exposure |
-| GCP | GKE | Use GKE Ingress or Istio |
-| Azure | AKS | Use Azure Application Gateway Ingress |
-| Any | k3s, k0s | Lightweight K8s for self-hosted |
+| Cloud | Managed K8s | Notes                                           |
+| ----- | ----------- | ----------------------------------------------- |
+| AWS   | EKS         | Use ALB Ingress Controller for gateway exposure |
+| GCP   | GKE         | Use GKE Ingress or Istio                        |
+| Azure | AKS         | Use Azure Application Gateway Ingress           |
+| Any   | k3s, k0s    | Lightweight K8s for self-hosted                 |
 
 ### Production considerations
 

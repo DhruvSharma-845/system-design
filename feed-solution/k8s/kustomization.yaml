@@ -23,3 +23,10 @@ resources:
   # API Gateway
   - gateway-deployment.yaml
   - gateway-service.yaml
+
+  # Feeds Web App
+  - feeds-web-app-deployment.yaml
+  - feeds-web-app-service.yaml
+
+  # External access (no port-forward)
+  - feed-ingress.yaml
