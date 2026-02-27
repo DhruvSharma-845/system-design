@@ -1,225 +1,71 @@
-Directory containing services and apps for feed solution
+# Feed Solution
 
-# Architecture Overview
+A feed-style app with login, signup, posts, and timeline. Runs on Kubernetes (Kind) with Keycloak, Spring Cloud Gateway, and microservices (user, post, timeline).
 
-```
-                                  ┌──────────┐
-                                  │ Browser  │
-                                  │ (User)   │
-                                  └────┬─────┘
-                                       │
-                                http://feed.local
-                                       │
-┌──────────────────────────────────────┼───────────────────────────────────┐
-│                   Kubernetes Cluster (feed namespace)                     │
-│                                      │                                   │
-│          ┌───────────────────────────▼─────────────────────────┐        │
-│          │           NGINX Gateway Fabric (Gateway API)         │        │
-│          │                  host: feed.local                    │        │
-│          │                                                      │        │
-│          │  /           → feeds-web-app :80                     │        │
-│          │  /api        → gateway :9090                         │        │
-│          │  /realms     → keycloak :8080                        │        │
-│          │  /resources  → keycloak :8080                        │        │
-│          └──────┬────────────────┬────────────────┬────────────┘        │
-│                 │                │                │                      │
-│                 ▼                ▼                ▼                      │
-│        ┌──────────────┐  ┌────────────┐  ┌──────────────────┐          │
-│        │ feeds-web-app│  │  Keycloak  │  │   API Gateway    │          │
-│        │              │  │   (IdP)    │  │ (Spring Cloud GW)│          │
-│        │ React 19 +   │  │            │  │                  │          │
-│        │ Vite SPA     │  │ OIDC /     │  │ JWT validation   │          │
-│        │              │  │ OAuth2     │  │ via Keycloak JWKS│          │
-│        │ nginx :80    │  │ :8080      │  │ + route to svcs  │          │
-│        └──────────────┘  └────────────┘  │ :9090            │          │
-│                                          └────────┬─────────┘          │
-│                                                   │                    │
-│                                            ┌──────▼──────────┐        │
-│                                            │  Post Service    │        │
-│                                            │ (Spring Boot +   │        │
-│                                            │  OAuth2 Resource │        │
-│                                            │  Server)         │        │
-│                                            │ JWT validation   │        │
-│                                            │ via Keycloak JWKS│        │
-│                                            │ :8080            │        │
-│                                            └────────┬────────┘        │
-│                                                     │                  │
-│                                              ┌──────▼───────┐         │
-│                                              │  PostgreSQL   │         │
-│                                              │    :5432      │         │
-│                                              └──────────────┘         │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
+**Architecture:** See [architecture.md](./architecture.md) for diagrams, auth flow, technology choices, and project structure.
 
-OIDC Flow:
-  1. Browser loads React SPA from feeds-web-app (/)
-  2. User clicks Login/Sign Up → redirect to Keycloak (/realms/feed/...)
-  3. Keycloak authenticates user → Authorization Code + PKCE → JWT tokens
-  4. Browser sends API requests with Bearer JWT → /api/v1/posts
-  5. Gateway validates JWT (JWKS) → routes to Post Service
-  6. Post Service validates JWT (JWKS, defense-in-depth) → processes request
-```
-
-## Auth Flow
-
-### User Registration (self-service signup)
-
-1. User clicks "Sign Up" in the frontend (or visits Keycloak directly)
-2. Frontend redirects to Keycloak's login page, which has a **Register** link
-3. User fills in the registration form (username, email, first/last name, password)
-4. Keycloak creates the account and auto-assigns the `feed_user` role
-5. User is authenticated and redirected back to the frontend with JWT tokens
-6. No backend code needed -- Keycloak handles the entire registration flow
-
-### User Login & API Access
-
-1. **User authenticates** with Keycloak via OIDC (Authorization Code + PKCE for SPAs)
-2. **Keycloak issues JWT** tokens (access token + refresh token)
-3. **Frontend sends requests** to the API Gateway with `Authorization: Bearer <JWT>`
-4. **Gateway validates JWT** (first layer of defense) and routes to the microservice
-5. **Microservice validates JWT** independently (defense in depth) and applies authorization
-6. **User identity** is extracted from JWT `sub` claim (Keycloak user UUID)
-7. **Roles** are extracted from JWT `realm_access.roles` claim
-
-## Technology Choices
-
-| Component         | Technology                                 | Why                                                        |
-| ----------------- | ------------------------------------------ | ---------------------------------------------------------- |
-| Frontend          | **React 19 + Vite + TypeScript**           | Modern SPA with fast build tooling                         |
-| K8s Ingress       | **NGINX Gateway Fabric (Gateway API)**     | K8s-native routing, path-based traffic splitting           |
-| Identity Provider | **Keycloak**                               | Open-source, cloud-agnostic, OIDC/OAuth2/SAML, self-hosted |
-| API Gateway       | **Spring Cloud Gateway**                   | Native Spring integration, reactive, JWT validation        |
-| Service Auth      | **Spring Security OAuth2 Resource Server** | Industry standard, per-service JWT validation              |
-| Auth Protocol     | **OpenID Connect (OIDC)**                  | Industry standard on top of OAuth2                         |
-| Token Format      | **JWT**                                    | Stateless, self-contained, verifiable                      |
-| Frontend Auth     | **OIDC Authorization Code + PKCE**         | Secure flow for SPAs, no client secret needed              |
-
-## Roles & Permissions
-
-| Role             | Description                            | Permissions                            |
-| ---------------- | -------------------------------------- | -------------------------------------- |
-| `feed_user`      | Standard user                          | Create posts, read posts               |
-| `feed_moderator` | Content moderator (includes feed_user) | All user permissions + delete any post |
-| `feed_admin`     | Administrator (includes all roles)     | Full access to all resources           |
-
-## Project Structure
-
-```
-feed-solution/
-├── feeds-web-app/              # Frontend SPA (React 19 + Vite + TypeScript)
-│   ├── package.json
-│   ├── Dockerfile              # Multi-stage: build → nginx:alpine
-│   ├── nginx.conf              # SPA routing (try_files)
-│   └── src/
-│       ├── main.tsx
-│       └── App.tsx             # OIDC PKCE login, post creation, role-based UI
-├── gateway/                    # API Gateway (Spring Cloud Gateway)
-│   ├── pom.xml
-│   ├── Dockerfile
-│   └── src/main/
-│       ├── java/.../gateway/
-│       │   ├── GatewayApplication.java
-│       │   └── config/SecurityConfig.java
-│       └── resources/application.yml
-├── postservice/                # Post Service (Spring Boot)
-│   ├── pom.xml
-│   ├── Dockerfile
-│   └── src/main/
-│       ├── java/.../postservice/
-│       │   ├── config/SecurityConfig.java     # JWT validation + RBAC
-│       │   ├── controller/PostSubmissionController.java
-│       │   └── ...
-│       └── resources/
-│           ├── application.properties
-│           └── db/migration/
-│               ├── V1__create_posts_table.sql
-│               └── V2__add_author_to_posts.sql
-├── keycloak/                   # Keycloak realm configuration
-│   └── feed-realm.json         # Pre-configured realm, clients, roles, test users
-├── k8s/                        # Kubernetes manifests
-│   ├── kustomization.yaml
-│   ├── feed-gateway-api.yaml   # NGINX Gateway Fabric + HTTPRoute (ingress)
-│   ├── feeds-web-app-*.yaml    # Frontend deployment
-│   ├── keycloak-*.yaml         # Keycloak deployment
-│   ├── gateway-*.yaml          # API Gateway deployment
-│   ├── postservice-*.yaml      # Post service deployment
-│   └── postgres-*.yaml         # PostgreSQL deployment
-├── kind-config.yaml            # Kind cluster config (host ports 80/443)
-├── build-deploy-script.sh      # Build and deploy all services
-└── README.md
-```
-
-# Local Development Setup
+---
 
 ## Prerequisites
 
-- Kind (Kubernetes in Docker)
+- [Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker)
 - Podman or Docker
 - kubectl
 - Helm
-- jq (for parsing JSON responses)
+- jq (for parsing JSON)
 
-## 1. Create local Kubernetes cluster
+## Quick Start
+
+### 1. Create cluster
 
 ```bash
 kind create cluster --config kind-config.yaml
 ```
 
-## 2. Build and deploy all services
+### 2. Build and deploy
 
 ```bash
 chmod +x ./build-deploy-script.sh
 ./build-deploy-script.sh
 ```
 
-## 3. Wait for pods to be ready
+### 3. Wait for pods
 
 ```bash
 kubectl -n feed get pods -w
 ```
 
-## 4. Enable URL access (no frontend/API port-forwarding)
+### 4. Local URL access
 
-Map `feed.local` to localhost:
+Add to `/etc/hosts`:
 
 ```bash
 echo "127.0.0.1 feed.local" | sudo tee -a /etc/hosts
 ```
 
-Frontend is available at:
+- **App:** http://feed.local  
+- **API:** http://feed.local/api  
 
-```
-http://feed.local
-```
-
-API is available at:
-
-```
-http://feed.local/api
-```
-
-Optional (Keycloak only):
+Optional (Keycloak admin):
 
 ```bash
 kubectl -n feed port-forward svc/keycloak 8080:8080
 ```
 
-## 5. Test authentication
+## Test Authentication
 
-### Get a JWT token
+Get a token (use **feed-gateway** client for password grant):
 
 ```bash
-# Using the direct access grant (Resource Owner Password) for testing
 TOKEN=$(curl -s -X POST http://localhost:8080/realms/feed/protocol/openid-connect/token \
-  -d 'client_id=feed-frontend' \
+  -d 'client_id=feed-gateway' \
+  -d 'client_secret=feed-gateway-secret' \
   -d 'username=testuser' \
   -d 'password=testpass' \
   -d 'grant_type=password' | jq -r '.access_token')
-
-echo $TOKEN
 ```
 
-### Create a post (via gateway through Kubernetes Gateway URL)
+Create a post:
 
 ```bash
 curl -X POST http://feed.local/api/v1/posts \
@@ -228,16 +74,7 @@ curl -X POST http://feed.local/api/v1/posts \
   -d '{"content": "Hello from authenticated user!"}'
 ```
 
-### Verify auth is enforced (should return 401)
-
-```bash
-curl -v http://feed.local/api/v1/posts
-```
-
-## Seed Test Users (dev only)
-
-These users are pre-loaded via `feed-realm.json` for local development testing.
-In production, all users register dynamically through Keycloak's self-service signup.
+## Seed Users (dev)
 
 | Username      | Password | Roles                     |
 | ------------- | -------- | ------------------------- |
@@ -245,117 +82,9 @@ In production, all users register dynamically through Keycloak's self-service si
 | testadmin     | testpass | feed_user, feed_admin     |
 | testmoderator | testpass | feed_user, feed_moderator |
 
-## Register a New User (dynamic signup)
+## Register a New User
 
-Keycloak is configured for self-service registration:
+1. Open the app at http://feed.local and click **Sign Up**, or go to Keycloak and click **Register**.
+2. After signup, the app calls the user service to persist the user; you can then log in and create posts.
 
-- **Realm**: `registrationAllowed: true` (realm setting)
-- **feed-frontend** client: standard flow enabled; redirect URIs include app origins
-- **Default role**: New users get the `feed_user` role automatically
-
-After a user signs up via Keycloak and is redirected back with an authorization code, the app exchanges the code for tokens and then calls the **user service** (`POST /api/v1/users/signup`) to persist the user in the application database (idempotent: create if not exists).
-
-After port-forwarding Keycloak, you can visit the registration page directly:
-
-```
-http://localhost:8080/realms/feed/protocol/openid-connect/registrations?client_id=feed-frontend&response_type=code&scope=openid&redirect_uri=http://localhost:3000/
-```
-
-Or go to the Keycloak login page and click **Register**:
-
-```
-http://localhost:8080/realms/feed/account
-```
-
-New users are automatically assigned the `feed_user` role upon registration.
-Admins can promote users to `feed_moderator` or `feed_admin` via the Keycloak Admin Console.
-
-## Keycloak Admin Console
-
-Access at http://localhost:8080 after port-forwarding.
-
-- Username: `admin`
-- Password: `admin`
-
-# Frontend Integration
-
-The `feed-frontend` client in Keycloak is configured for the React SPA:
-
-- **Protocol**: OpenID Connect
-- **Flow**: Authorization Code + PKCE (most secure for SPAs)
-- **Public Client**: Yes (no client secret required)
-- **Redirect URIs**: localhost:3000, localhost:5173, localhost:4200
-
-### Recommended frontend OIDC libraries
-
-| Framework | Library                                        |
-| --------- | ---------------------------------------------- |
-| React     | `oidc-client-ts` + `react-oidc-context`        |
-| Vue       | `oidc-client-ts` + custom composable           |
-| Angular   | `angular-auth-oidc-client`                     |
-| Any       | `keycloak-js` (Keycloak's official JS adapter) |
-
-### Frontend signup + login flow (PKCE)
-
-**Sign Up (new user):**
-
-1. User clicks "Sign Up" in the frontend
-2. Frontend redirects to Keycloak (same OIDC endpoint -- Keycloak shows a "Register" link)
-3. User fills in the registration form (Keycloak's built-in UI or custom theme)
-4. Keycloak creates the account, assigns `feed_user` role automatically
-5. Keycloak redirects back with authorization code
-6. Frontend exchanges code for tokens (access + refresh + id token)
-
-**Login (existing user):**
-
-1. User clicks "Login" -> redirect to Keycloak login page
-2. User enters credentials
-3. Keycloak redirects back with authorization code
-4. Frontend exchanges code for tokens
-
-**After authentication (both flows):**
-
-1. Frontend stores tokens in memory (not localStorage -- XSS protection)
-2. Frontend includes `Authorization: Bearer <access_token>` in API requests to the gateway
-3. Frontend uses token claims to show/hide UI based on roles
-4. Frontend uses the refresh token to silently renew the access token before expiry
-
-### Role-based UI visibility
-
-```javascript
-// Example: Check roles from decoded JWT access token
-const roles = decodedToken.realm_access?.roles || [];
-
-const canCreatePost = roles.includes("feed_user");
-const canModerate = roles.includes("feed_moderator");
-const canAdmin = roles.includes("feed_admin");
-
-// Show/hide UI elements based on roles
-// - All authenticated users see the feed and can create posts
-// - Moderators see a "Delete" button on any post
-// - Admins see a "User Management" section in navigation
-```
-
-# Cloud Deployment Notes
-
-This architecture is **cloud-agnostic** and runs on any Kubernetes cluster:
-
-| Cloud | Managed K8s | Notes                                           |
-| ----- | ----------- | ----------------------------------------------- |
-| AWS   | EKS         | Use ALB Ingress Controller for gateway exposure |
-| GCP   | GKE         | Use GKE Ingress or Istio                        |
-| Azure | AKS         | Use Azure Application Gateway Ingress           |
-| Any   | k3s, k0s    | Lightweight K8s for self-hosted                 |
-
-### Production considerations
-
-1. **Keycloak**: Switch from `start-dev` to `start` mode with external PostgreSQL
-2. **Email verification**: Set `verifyEmail: true` in realm config and configure SMTP in Keycloak (Realm Settings -> Email). This ensures only real email addresses can register.
-3. **SMTP**: Configure an email provider (SendGrid, AWS SES, Mailgun) in Keycloak for verification emails, password resets, and notifications
-4. **TLS**: Use cert-manager + Let's Encrypt for HTTPS
-5. **Ingress**: Add Ingress resource to expose the gateway externally
-6. **Secrets**: Use external secret management (Vault, AWS Secrets Manager, etc.)
-7. **Keycloak HA**: Run multiple Keycloak replicas with shared database
-8. **Token security**: Configure appropriate token lifespans in Keycloak
-9. **Custom Keycloak theme**: Brand the login/registration pages to match your frontend
-10. **Remove seed users**: Delete the test users from `feed-realm.json` before production deployment
+Keycloak admin (after port-forward): http://localhost:8080 — user `admin`, password `admin`.
