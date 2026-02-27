@@ -5,6 +5,14 @@ echo "=== Building Post Service ==="
 podman build -t localhost/postservice:dev ./postservice
 podman save -o /tmp/postservice-dev.tar localhost/postservice:dev
 
+echo "=== Building Timeline Service ==="
+podman build -t localhost/timelineservice:dev ./timelineservice
+podman save -o /tmp/timelineservice-dev.tar localhost/timelineservice:dev
+
+echo "=== Building User Service ==="
+podman build -t localhost/userservice:dev ./userservice
+podman save -o /tmp/userservice-dev.tar localhost/userservice:dev
+
 echo "=== Building API Gateway ==="
 podman build -t localhost/gateway:dev ./gateway
 podman save -o /tmp/gateway-dev.tar localhost/gateway:dev
@@ -15,6 +23,8 @@ podman save -o /tmp/feeds-web-app-dev.tar localhost/feeds-web-app:dev
 
 echo "=== Loading images into Kind cluster ==="
 kind load image-archive /tmp/postservice-dev.tar --name feed-cluster
+kind load image-archive /tmp/timelineservice-dev.tar --name feed-cluster
+kind load image-archive /tmp/userservice-dev.tar --name feed-cluster
 kind load image-archive /tmp/gateway-dev.tar --name feed-cluster
 kind load image-archive /tmp/feeds-web-app-dev.tar --name feed-cluster
 
@@ -36,6 +46,8 @@ echo "=== Restarting deployments to pick up new images ==="
 # Since the image tag stays the same, kubectl apply may not recreate pods.
 # A rollout restart forces the pod to pick up the newly loaded local image.
 kubectl -n feed rollout restart deployment/postservice
+kubectl -n feed rollout restart deployment/timelineservice
+kubectl -n feed rollout restart deployment/userservice
 kubectl -n feed rollout restart deployment/gateway
 kubectl -n feed rollout restart deployment/feeds-web-app
 

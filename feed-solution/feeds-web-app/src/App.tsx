@@ -274,6 +274,19 @@ function App() {
 
         localStorage.setItem(TOKEN_STORAGE_KEY, authData.access_token)
         setToken(authData.access_token)
+
+        // Persist user in app DB after Keycloak login/signup (idempotent)
+        try {
+          await fetch('/api/v1/users/signup', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${authData.access_token}`,
+            },
+          })
+        } catch {
+          // Non-fatal: user can still use the app; signup sync may be retried on next login
+        }
+
         setStatusMessage('Login successful.')
         setErrorMessage('')
         loginCompleted = true

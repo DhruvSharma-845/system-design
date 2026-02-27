@@ -17,5 +17,6 @@ public class Post {
     @Id
     private Long id;
     private String content;
-    private String authorId;
+    /** Internal user id (users.id). Resolved via userservice API at create time. */
+    private Long authorId;
 }

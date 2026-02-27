@@ -28,6 +28,10 @@ spec:
               value: http://keycloak:8080/realms/feed/protocol/openid-connect/certs
             - name: POSTSERVICE_URL
               value: http://postservice:8080
+            - name: TIMELINESERVICE_URL
+              value: http://timelineservice:8081
+            - name: USERSERVICE_URL
+              value: http://userservice:8082
           readinessProbe:
             httpGet:
               path: /actuator/health

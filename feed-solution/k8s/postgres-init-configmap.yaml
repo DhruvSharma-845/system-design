@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: feed
+data:
+  create-databases.sql: |
+    -- Create app databases (runs on first Postgres init only).
+    CREATE DATABASE usersdb;
+    CREATE DATABASE postsdb;
+    ALTER DATABASE usersdb OWNER TO feedsvc;
+    ALTER DATABASE postsdb OWNER TO feedsvc;

@@ -9,6 +9,7 @@ resources:
   - postgres-pvc.yaml
   - postgres-deployment.yaml
   - postgres-service.yaml
+  - postgres-init-configmap.yaml
 
   # Keycloak (Identity Provider)
   - keycloak-secret.yaml
@@ -19,6 +20,14 @@ resources:
   # Post Service
   - postservice-deployment.yaml
   - postservice-service.yaml
+
+  # Timeline Service
+  - timelineservice-deployment.yaml
+  - timelineservice-service.yaml
+
+  # User Service
+  - userservice-deployment.yaml
+  - userservice-service.yaml
 
   # API Gateway
   - gateway-deployment.yaml

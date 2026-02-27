@@ -247,7 +247,15 @@ In production, all users register dynamically through Keycloak's self-service si
 
 ## Register a New User (dynamic signup)
 
-After port-forwarding Keycloak, visit the registration page directly:
+Keycloak is configured for self-service registration:
+
+- **Realm**: `registrationAllowed: true` (realm setting)
+- **feed-frontend** client: standard flow enabled; redirect URIs include app origins
+- **Default role**: New users get the `feed_user` role automatically
+
+After a user signs up via Keycloak and is redirected back with an authorization code, the app exchanges the code for tokens and then calls the **user service** (`POST /api/v1/users/signup`) to persist the user in the application database (idempotent: create if not exists).
+
+After port-forwarding Keycloak, you can visit the registration page directly:
 
 ```
 http://localhost:8080/realms/feed/protocol/openid-connect/registrations?client_id=feed-frontend&response_type=code&scope=openid&redirect_uri=http://localhost:3000/

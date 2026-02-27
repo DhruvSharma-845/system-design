@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timelineservice
+  namespace: feed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: timelineservice
+  template:
+    metadata:
+      labels:
+        app: timelineservice
+    spec:
+      containers:
+        - name: timelineservice
+          image: localhost/timelineservice:dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8081
+          env:
+            - name: KEYCLOAK_ISSUER_URI
+              value: http://keycloak:8080/realms/feed
+            - name: KEYCLOAK_JWK_SET_URI
+              value: http://keycloak:8080/realms/feed/protocol/openid-connect/certs
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/postsdb
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD

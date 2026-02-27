@@ -21,7 +21,7 @@ spec:
             - containerPort: 8080
           env:
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres:5432/postservicedb
+              value: jdbc:postgresql://postgres:5432/postsdb
             - name: SPRING_DATASOURCE_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -36,3 +36,5 @@ spec:
               value: http://keycloak:8080/realms/feed
             - name: KEYCLOAK_JWK_SET_URI
               value: http://keycloak:8080/realms/feed/protocol/openid-connect/certs
+            - name: USERSERVICE_URL
+              value: http://userservice:8082

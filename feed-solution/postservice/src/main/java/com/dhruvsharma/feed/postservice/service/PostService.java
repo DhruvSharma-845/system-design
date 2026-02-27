@@ -4,5 +4,8 @@ import com.dhruvsharma.feed.postservice.dto.PostCreationResponse;
 import com.dhruvsharma.feed.postservice.dto.PostRequest;
 
 public interface PostService {
-    PostCreationResponse createPost(PostRequest post, String authorId);
+    /**
+     * Creates a post. Resolves the author via userservice (forwarded JWT) to get internal user id (Pattern B).
+     */
+    PostCreationResponse createPost(PostRequest post, String authorizationHeader);
 }

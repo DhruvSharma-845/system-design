@@ -17,6 +17,14 @@ spring:
               uri: ${POSTSERVICE_URL:http://postservice:8080}
               predicates:
                 - Path=/api/v1/posts/**
+            - id: timelineservice-routes
+              uri: ${TIMELINESERVICE_URL:http://timelineservice:8081}
+              predicates:
+                - Path=/api/v1/timelines/**
+            - id: userservice-routes
+              uri: ${USERSERVICE_URL:http://userservice:8082}
+              predicates:
+                - Path=/api/v1/users/**
 
             # Future: Add more service routes here
             # - id: userservice-routes
